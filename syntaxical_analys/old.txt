@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿﻿using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
 using System.Text.RegularExpressions;
 
@@ -66,7 +66,6 @@ internal class Program
         }
 
         // Проверка начала и конца блока BEGIN END
-
         string[] keys_tmp = key.Split(" ");
         if (!keys_tmp[0].Equals("BEGIN") || !keys_tmp[keys_tmp.Length - 1].Equals("END"))
         {
@@ -81,48 +80,16 @@ internal class Program
             key = key + keys_tmp[i];
         }
 
-        string? updatedKey = key;
-
-        string pattern = @"IF[\s\S]*?END_IF;";
-
-        Match match = Regex.Match(key, pattern);
-
-        string extractedBlock = string.Empty; // Переменная для сохранения блока
-        
-        // Проверка наличия условного оператора
-        
-        if (key.Contains("IF") || key.Contains("THEN") || key.Contains("ELSE") || key.Contains("END_IF"))
+        string[] exp = key.Split(";");
+        for (int i = 0; i < exp.Length - 1; i++)
         {
-            if (match.Success)
+            if (exp[i].Contains("IF") && exp[i].Contains("THEN") && exp[i + 1].Contains("ELSE") && exp[i + 2].Equals("END_IF"))
             {
-                // Сохраняем найденный блок в переменную
-                extractedBlock = match.Value;
-                updatedKey = Regex.Replace(key, pattern, string.Empty, RegexOptions.Singleline);
+                ProcessIf(exp[i], exp[i + 1], aa);
+                i += 2;
             }
-            else
-            {
-                _err = 1;
-                Console.WriteLine("Неверное выражение");
-                return;
-            }
-        }
-        
-        string[] exp0 = updatedKey.Split(";");
-
-        string[] exp = new string[exp0.Length];
-        Array.Copy(exp0, exp, exp0.Length);
-        exp[exp.Length - 1] = extractedBlock.Trim();
-
-        // BEGIN IF A.and.B THEN write(C); ELSE read(C); END_IF; END
-        // BEGIN write(B); IF A.and.B THEN write(C); write(A); ELSE read(C); END_IF; A = A.and.C; END
-        for (int i = 0; i < exp.Length; i++)
-        {
-
-            if (exp[i].Contains("IF") && exp[i].Contains("THEN") && exp[i].Contains("ELSE") && exp[i].Contains("END_IF"))
-            {
-                ProcessIf(exp[i], aa);
-            }
-            else if (exp[i].Contains("write"))
+            
+            if (exp[i].Contains("write"))
             {
                 ProcessWrite(exp[i], aa);
             }
@@ -155,16 +122,11 @@ internal class Program
     }
 
     // BEGIN IF A.and.B THEN write(C); ELSE read(C); END_IF; END
-    private static void ProcessIf(string exp, string[] aa)
+    private static void ProcessIf(string exp, string exp2, string[] aa)
     {
         string variables = exp.Replace("IF", "").Trim();
         string[] parts1 = variables.Split(new string[] { "THEN" }, StringSplitOptions.None);
-        string[] parts2 = parts1[1].Split(new string[] { "ELSE" }, StringSplitOptions.None);
-        string[] parts3 = parts2[1].Split(new string[] { "END_" }, StringSplitOptions.None);
-        
-        string[] thenCommands = parts2[0].Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries); // Без пустых строк в конце
-        string[] elseCommands = parts3[0].Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
-        // parts1[0] - условие
+
         // До THEN
         if ((parts1[0].Contains(".and.") || parts1[0].Contains(".or.") || parts1[0].Contains(".equ.") || parts1[0].Contains(".not.")) && !parts1[0].Contains("="))
         {
@@ -177,9 +139,9 @@ internal class Program
             _err = 1;
             return;
         }
-        // До ELSE
-
-        foreach (string part in thenCommands)
+        string[] parts = new string[parts1.Length - 1];
+        Array.Copy(parts1, 1, parts, 0, parts.Length);
+        foreach (string part in parts)
         {
             if (part.Contains("write"))
             {
@@ -189,10 +151,7 @@ internal class Program
             {
                 ProcessRead(part, aa);
             }
-            else if (part.Contains("="))
-            {
-                ProcessLogic(part, aa);
-            }    
+           
             else
             {
                 Console.WriteLine("Блок THEN задан некорректно");
@@ -200,28 +159,32 @@ internal class Program
                 return;
             }
         }
-        // До END_IF
-        foreach (string part in elseCommands)
+        
+        // Блок ELSE
+
+        string variables2 = exp2.Replace("ELSE", "").Trim();
+
+        if (variables2.Contains("write"))
         {
-            if (part.Contains("write"))
-            {
-                ProcessWrite(part, aa);
-            }
-            else if (part.Contains("read"))
-            {
-                ProcessRead(part, aa);
-            }
-            else if (part.Contains("="))
-            {
-                ProcessLogic(part, aa);
-            }
-            else
-            {
-                Console.WriteLine("Блок ELSE задан некорректно");
-                _err = 1;
-                return;
-            }
+            ProcessWrite(variables2, aa);
         }
+        else if (variables2.Contains("read"))
+        {
+            ProcessRead(variables2, aa);
+        }
+        else if (variables2.Contains("="))
+        {
+            // Обработка логического выражения
+            ProcessLogic(variables2, aa);
+        }
+        else
+        {
+            Console.WriteLine("Блок ELSE задан некорректно");
+            _err = 1;
+            return;
+        }
+
+
     }
     private static void ProcessWrite(string exp, string[] aa)
     {
@@ -295,5 +258,3 @@ internal class Program
         return regex.IsMatch(input);
     }
 }
-
-
